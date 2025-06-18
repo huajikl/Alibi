@@ -1,36 +1,58 @@
-# This is a basic workflow to help you get started with Actions
-
-name: CI
-
-# Controls when the workflow will run
+name: Build unsigned app # 将名称改为表示构建未签名应用
 on:
-  # Triggers the workflow on push or pull request events but only for the "master" branch
-  push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
+  release:
+    types: [published] # 您也可以考虑修改触发器，例如在每次推送或PR时运行，以便于测试未签名APK
 
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+  build-unsigned-apk: # 修改作业名称
     runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
+      - uses: gradle/wrapper-validation-action@v2
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
-        run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+      # --- 移除 KeyStore 相关的步骤 ---
+      # 这一步可以完全删除，因为不再需要签名
+      # - name: Write KeyStore 🗝️
+      #   uses: ./.github/actions/prepare-keystore
+      #   with:
+      #     signingStorePassword: ${{ secrets.SIGNING_STORE_PASSWORD }}
+      #     signingKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
+      #     signingKeyAlias: ${{ secrets.SIGNING_KEY_ALIAS }}
+      #     keyStoreBase64: ${{ secrets.KEYSTORE }}
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'adopt'
+          java-version: 21
+          cache: 'gradle'
+
+      - name: Build Unsigned APKs 📱 # 修改步骤名称以反映未签名
+        # 使用 'assembleDebug' 或 'assemble' 来构建未签名的 APK
+        # assembleDebug 会生成一个调试版本的 APK，通常是未签名的
+        # assemble 会构建所有变体的 APK，包括未签名的调试版本
+        run: ./gradlew assembleDebug
+
+      - name: Upload Unsigned APKs 🚀 # 修改步骤名称
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/') # 您可以根据需要修改此条件，例如在每次构建后都上传
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+        with:
+          # 修改文件路径以匹配 assembleDebug 的输出
+          files: app/build/outputs/apk/debug/*.apk
+
+      # --- 移除 AABs 构建和上传步骤，除非您也需要未签名的 AAB ---
+      # AAB 通常用于上传到 Google Play，需要签名。
+      # 如果您仍然需要未签名的 AAB，可以类似地修改：
+      # - name: Build Unsigned AABs 📱
+      #   run: ./gradlew bundleDebug # 通常 bundleDebug 会生成未签名的 AAB
+      # - name: Upload Unsigned AABs 🚀
+      #   uses: softprops/action-gh-release@v1
+      #   if: startsWith(github.ref, 'refs/tags/')
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+      #   with:
+      #     files: app/build/outputs/bundle/debug/*.aab
