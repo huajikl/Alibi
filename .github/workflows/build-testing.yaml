@@ -2,6 +2,7 @@ name: Build and push debug app
 
 on:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   debug-builds:
